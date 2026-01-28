@@ -11,7 +11,8 @@ def hands_in_frame_pct(outputs_per_frame):
         return 0.0
     
     frames_with_hands = 0
-    for frame_idx, frame_outputs in enumerate(outputs_per_frame):
+    for frame_idx, frame_outputs in outputs_per_frame.items():
+        # frame_outputs is a dict mapping object_id to mask arrays
         num_objects = len(frame_outputs)
         if num_objects > 0:
             frames_with_hands += 1
@@ -30,7 +31,8 @@ def both_hands_in_frame_pct(outputs_per_frame):
         return 0.0
     
     frames_with_both_hands = 0
-    for frame_idx, frame_outputs in enumerate(outputs_per_frame):
+    for frame_idx, frame_outputs in outputs_per_frame.items():
+        # frame_outputs is a dict mapping object_id to mask arrays
         num_objects = len(frame_outputs)
         if num_objects >= 2:
             frames_with_both_hands += 1

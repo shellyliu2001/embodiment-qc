@@ -32,7 +32,7 @@ def formatted_outputs_to_masklet(video_frames_for_vis, outputs_per_frame, defaul
 
     masklet = {}
 
-    for frame_idx, objmask_dict in outputs_set.items():
+    for frame_idx, objmask_dict in outputs_per_frame.items():
         out_obj_ids = []
         out_binary_masks = []
         out_boxes_xywh = []
@@ -70,17 +70,90 @@ def formatted_outputs_to_masklet(video_frames_for_vis, outputs_per_frame, defaul
 
 # Save visualization video with segmentation masks overlaid on frames
 def save_video(video_frames_for_vis, outputs_per_frame, out_path):
-    masklet_outputs = formatted_outputs_to_masklet(video_frames_for_vis, outputs)
+    masklet_outputs = formatted_outputs_to_masklet(video_frames_for_vis, outputs_per_frame)
     save_masklet_video(
         video_frames=video_frames_for_vis,
         outputs=masklet_outputs,
         out_path=out_path,
     )
 
+# Convert inference outputs format to visualization format
+def convert_outputs_for_visualization(outputs_per_frame, video_frames_for_vis=None):
+    """
+    Convert outputs_per_frame from inference format to format expected by prepare_masks_for_visualization.
+    
+    Args:
+        outputs_per_frame: Dictionary mapping frame_index to dict of {object_id: mask_array}
+        video_frames_for_vis: Optional list of frame paths to determine mask shape
+    
+    Returns:
+        Dictionary mapping frame_index to dict with 'out_obj_ids' and 'out_binary_masks'
+    """
+    # Get mask shape from first non-empty frame or from video frames
+    mask_shape = None
+    if video_frames_for_vis:
+        try:
+            img0 = load_frame(video_frames_for_vis[0])
+            mask_shape = img0.shape[:2]  # (H, W)
+        except:
+            pass
+    
+    # If we couldn't get shape from video, try from first non-empty mask
+    if mask_shape is None:
+        for frame_idx, objmask_dict in outputs_per_frame.items():
+            if len(objmask_dict) > 0:
+                sample_mask = list(objmask_dict.values())[0]
+                if isinstance(sample_mask, torch.Tensor):
+                    mask_shape = tuple(sample_mask.shape)
+                else:
+                    mask_shape = np.array(sample_mask).shape
+                break
+        
+        if mask_shape is None:
+            mask_shape = (1080, 1920)  # Default shape
+    
+    converted = {}
+    for frame_idx, objmask_dict in outputs_per_frame.items():
+        out_obj_ids = []
+        out_binary_masks = []
+        
+        for obj_id, mask in objmask_dict.items():
+            # Convert mask to numpy array if needed
+            if isinstance(mask, torch.Tensor):
+                mask_np = mask.detach().cpu().numpy()
+            else:
+                mask_np = np.array(mask)
+            
+            # Ensure boolean mask
+            mask_bool = mask_np.astype(bool)
+            
+            # Skip empty masks
+            if not mask_bool.any():
+                continue
+            
+            out_obj_ids.append(int(obj_id))
+            out_binary_masks.append(mask_bool.astype(np.uint8))
+        
+        if len(out_obj_ids) > 0:
+            converted[frame_idx] = {
+                "out_obj_ids": np.array(out_obj_ids, dtype=np.int32),
+                "out_binary_masks": np.stack(out_binary_masks, axis=0).astype(np.uint8)
+            }
+        else:
+            # Empty frame - use determined shape
+            converted[frame_idx] = {
+                "out_obj_ids": np.array([], dtype=np.int32),
+                "out_binary_masks": np.zeros((0, *mask_shape), dtype=np.uint8)
+            }
+    
+    return converted
+
 # Visualize segmentation outputs per frame with optional stride and save to video file
 def visualize_outputs_per_frame(outputs_per_frame, video_path, stride=20, out_path=None):
     video_frames_for_vis = load_video_frames_for_vis(video_path)
-    outputs_per_frame = prepare_masks_for_visualization(outputs_per_frame)
+    # Convert to format expected by prepare_masks_for_visualization
+    converted_outputs = convert_outputs_for_visualization(outputs_per_frame, video_frames_for_vis)
+    outputs_per_frame = prepare_masks_for_visualization(converted_outputs)
     assert len(outputs_per_frame) == len(video_frames_for_vis), "Number of frames must match"
 
     for frame_idx in range(0, len(outputs_per_frame), stride):

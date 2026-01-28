@@ -1,7 +1,6 @@
 import glob
 import os
 
-
 # Propagate segmentation masks from the initial frame through the entire video
 def propagate_in_video(predictor, session_id):
     print(f"Starting propagation in video for session_id: {session_id}")
@@ -51,6 +50,14 @@ def run_inference_on_video(video_path, predictor, gpus_to_use, prompt_text_str =
     
     outputs_per_frame = propagate_in_video(predictor, session_id)
     print(f"=== Inference completed: {len(outputs_per_frame)} frames processed ===\n")
+    # finally, close the inference session to free its GPU resources
+    # (you may start a new session on another video)
+    _ = predictor.handle_request(
+        request=dict(
+            type="close_session",
+            session_id=session_id,
+        )
+    )
     return outputs_per_frame
 
 # Run inference on multiple videos: globs for subfolders in a parent directory, each subfolder contains frames from a single video

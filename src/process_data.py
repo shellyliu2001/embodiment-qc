@@ -38,6 +38,7 @@ def process_video(video_path, max_frames=200, stride=4):
     print(f"Processing video: {video_path}")
     frames = convert_video_to_frames(video_path, max_frames, stride)
     frames_dir = write_video_frames(frames)
+    del frames # free up memory
     print(f"Completed processing: {video_path}")
     return frames_dir
 
